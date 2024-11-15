@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>❤️ Scafire Node ❤️ Monitoring ❤️</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">❤️ Scafire Node ❤️ Monitoring ❤️</h1>
+            <div class="text-sm text-gray-600">
+                Auto-refresh: <span id="countdown">30</span>s
+            </div>
+        </div>
+        
+        <!-- Validators Grid -->
+        <div id="validatorsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Validator cards will be inserted here -->
+        </div>
+    </div>
+
+    <script>
+        class ValidatorMonitor {
+            constructor() {
+                // Define your validators here
+                this.validators = [
+                    {
+                        chainName: "Planq",
+                        rpcUrl: "https://rpc.cosmos.directory/planq",
+                        validatorAddress: "plqvaloper1hr35jxecft8ggkdm7ps26xxf3lk398ngnhm8g2",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },
+                    {
+                        chainName: "CNHO Stables",
+                        rpcUrl: "https://rpc.cosmos.directory/cnhostables",
+                        validatorAddress: "cnhovaloper193sddmvhwu4urzp83dcurqxrqxc82l3d84n95y",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                    
+                    {
+                        chainName: "Conscious",
+                        rpcUrl: "https://rpc.cosmos.directory/conscious",
+                        validatorAddress: "cvnvaloper1xfxvxzlkgc7gf2uakrk4ge8pl8t4wud5xaaerq",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                    
+                    {
+                        chainName: "BeeZee",
+                        rpcUrl: "https://rpc.cosmos.directory/beezee",
+                        validatorAddress: "bzevaloper1gk8k0u3vkt65xjc82l8qryf44pxp68dcsuth5c",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },
+                    {
+                        chainName: "AtomOne",
+                        rpcUrl: "https://rpc.cosmos.directory/atomone",
+                        validatorAddress: "atonevaloper1nlgdsf8kxwtk0u36xd8k29h6s4teaunq0c8x3f",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                                         
+                    {
+                        chainName: "Shido",
+                        rpcUrl: "https://rpc.cosmos.directory/shido",
+                        validatorAddress: "shidovaloper1gsmhz20fteu5hyy4d29hn07ly6lstgzcg0q7rz",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                    
+                    {
+                        chainName: "Source",
+                        rpcUrl: "https://rpc.cosmos.directory/source",
+                        validatorAddress: "sourcevaloper164k2sgrpemau4evtcg5y3vurzw2atm940yzsv3",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                    
+                    {
+                        chainName: "Teritori",
+                        rpcUrl: "https://rpc.cosmos.directory/teritori",
+                        validatorAddress: "torivaloper1ukrckxg5c54tvulhzmqmqfvmezfn5g0q4250ru",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    },                    
+                    {
+                        chainName: "Realio",
+                        rpcUrl: "https://rpc.cosmos.directory/realio",
+                        validatorAddress: "realiovaloper1s53quha9tuxvu59gl4k27uchcfqa2jyynrm9fs",
+                        status: 'Unknown',
+                        missedBlocks: 0,
+                        lastUpdated: new Date().toISOString()
+                    }
+                ];
+                
+                this.countdown = 30;
+                this.renderValidators();
+                this.startMonitoring();
+                this.startCountdown();
+            }
+
+            async fetchWithTimeout(resource, options = {}) {
+                const { timeout = 5000 } = options;
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeout);
+                try {
+                    const response = await fetch(resource, {
+                        ...options,
+                        signal: controller.signal,
+                        mode: 'cors',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    clearTimeout(id);
+                    return response;
+                } catch (error) {
+                    clearTimeout(id);
+                    throw error;
+                }
+            }
+
+            async updateValidatorStatus(validator) {
+                try {
+                    // Try different API endpoint structures
+                    const endpoints = [
+                        // Tendermint RPC endpoints
+                        {
+                            status: `${validator.rpcUrl}/status`,
+                            validator: `${validator.rpcUrl}/validators`
+                        },
+                        // LCD API endpoints
+                        {
+                            status: `${validator.rpcUrl}/cosmos/staking/v1beta1/validators/${validator.validatorAddress}`,
+                            signing: `${validator.rpcUrl}/cosmos/slashing/v1beta1/signing_infos/${validator.validatorAddress}`
+                        }
+                    ];
+
+                    let validatorData = null;
+                    let signingInfo = null;
+
+                    // Try each endpoint until we get a successful response
+                    for (const endpoint of endpoints) {
+                        try {
+                            const [statusResponse, signingResponse] = await Promise.all([
+                                this.fetchWithTimeout(endpoint.status),
+                                endpoint.signing ? this.fetchWithTimeout(endpoint.signing) : null
+                            ]);
+
+                            if (statusResponse.ok) {
+                                validatorData = await statusResponse.json();
+                                if (signingResponse && signingResponse.ok) {
+                                    signingInfo = await signingResponse.json();
+                                }
+                                break;
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to fetch from endpoint:`, endpoint, error);
+                            continue;
+                        }
+                    }
+
+                    if (!validatorData) {
+                        throw new Error('Failed to fetch validator data from all endpoints');
+                    }
+
+                    // Parse the response based on the endpoint structure
+                    let status = 'Unknown';
+                    let missedBlocks = 0;
+                    let votingPower = 0;
+
+                    if (validatorData.result) {
+                        // Tendermint RPC response
+                        status = 'BOND_STATUS_BONDED'; // Assume bonded if we can get the data
+                        votingPower = validatorData.result.voting_power || 0;
+                    } else if (validatorData.validator) {
+                        // LCD API response
+                        status = validatorData.validator.status;
+                        votingPower = parseInt(validatorData.validator.tokens) || 0;
+                    }
+
+                    if (signingInfo?.signing_info) {
+                        missedBlocks = parseInt(signingInfo.signing_info.missed_blocks_counter) || 0;
+                    }
+
+                    // Update validator data
+                    validator.status = status;
+                    validator.missedBlocks = missedBlocks;
+                    validator.votingPower = votingPower;
+                    validator.uptime = (100 - (missedBlocks % 100)).toFixed(2);
+                    validator.lastUpdated = new Date().toISOString();
+                    validator.error = null;
+
+                } catch (error) {
+                    console.error(`Error updating validator ${validator.chainName}:`, error);
+                    validator.status = 'Error';
+                    validator.error = `Failed to fetch validator data: ${error.message}`;
+                    validator.lastUpdated = new Date().toISOString();
+                }
+                this.renderValidators();
+            }
+
+            renderValidators() {
+                const grid = document.getElementById('validatorsGrid');
+                grid.innerHTML = this.validators.map(validator => `
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800">${validator.chainName}</h3>
+                            <p class="text-sm text-gray-500 break-all">${validator.validatorAddress}</p>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Status:</span>
+                                <span class="${this.getStatusColor(validator.status)}">${validator.status}</span>
+                            </div>
+                            ${validator.uptime ? `
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Uptime:</span>
+                                <span class="font-medium">${validator.uptime}%</span>
+                            </div>
+                            ` : ''}
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Missed Blocks:</span>
+                                <span class="font-medium">${validator.missedBlocks || 0}</span>
+                            </div>
+                            ${validator.votingPower ? `
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Voting Power:</span>
+                                <span class="font-medium">${validator.votingPower}</span>
+                            </div>
+                            ` : ''}
+                            ${validator.error ? `
+                            <div class="text-red-600 text-sm">
+                                ${validator.error}
+                            </div>
+                            ` : ''}
+                            <div class="text-xs text-gray-500">
+                                Last Updated: ${new Date(validator.lastUpdated).toLocaleString()}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            getStatusColor(status) {
+                const colors = {
+                    'BOND_STATUS_BONDED': 'text-green-600',
+                    'BOND_STATUS_UNBONDING': 'text-yellow-600',
+                    'BOND_STATUS_UNBONDED': 'text-red-600',
+                    'Error': 'text-red-600',
+                    'Unknown': 'text-gray-600'
+                };
+                return colors[status] || 'text-gray-600';
+            }
+
+            startMonitoring() {
+                // Initial update
+                this.validators.forEach(validator => {
+                    this.updateValidatorStatus(validator);
+                });
+
+                // Update every 30 seconds
+                setInterval(() => {
+                    this.validators.forEach(validator => {
+                        this.updateValidatorStatus(validator);
+                    });
+                    this.countdown = 30;
+                }, 30000);
+            }
+
+            startCountdown() {
+                setInterval(() => {
+                    this.countdown--;
+                    if (this.countdown < 0) this.countdown = 30;
+                    document.getElementById('countdown').textContent = this.countdown;
+                }, 1000);
+            }
+        }
+
+        // Initialize the monitor
+        const validatorMonitor = new ValidatorMonitor();
+    </script>
+</body>
+</html>
